@@ -5,6 +5,7 @@ import de.hhu.propra.link.repositories.LinkRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,10 +40,19 @@ public class LinkController {
     public String newLink(@ModelAttribute @Valid Link link, BindingResult bindingResult) {
         this.currentLink = link;
 
-        // suggest an abbreviation if not set
-        if(link.getAbbreviation().isEmpty()){
-            String abbrevation = makeAbbrevation(new String(link.getUrl()));
-            link.setAbbreviation(abbrevation);
+        // check if url has already been abbreviated
+        boolean isAbbreviated = getAbbreviationIfAbbreviated(link.getUrl()) != null;
+        if(isAbbreviated) {
+            String abbreviation = getAbbreviationIfAbbreviated(link.getUrl());
+            FieldError error = new FieldError("link", "url", "The URL already is abbreviated with: " + abbreviation);
+            bindingResult.addError(error);
+        }
+
+
+        // suggest an abbreviation if not set unless URL already exists
+        if(!isAbbreviated && link.getAbbreviation().isEmpty()){
+            String abbreviation = makeAbbreviation(new String(link.getUrl()));
+            link.setAbbreviation(abbreviation);
         }
 
         if (bindingResult.hasErrors()) {
@@ -94,7 +104,7 @@ public class LinkController {
      * @param url The URL that is to be shortened
      * @return the abbrevation for the long URL
      */
-    private String makeAbbrevation(String url){
+    private String makeAbbreviation(String url){
 
         // removing the scheme from the URL
         // "https://example.com" -> "example.com"
@@ -115,13 +125,13 @@ public class LinkController {
 
         // create another abbreviation if the preferred one already exists
         int i = 1;
-        String abbrevation = tmp_abbreviation;
-        while( ! linkRepository.findById(abbrevation).isEmpty() ){
-            abbrevation = new String(tmp_abbreviation + i);
+        String abbreviation = tmp_abbreviation;
+        while( ! linkRepository.findById(abbreviation).isEmpty() ){
+            abbreviation = new String(tmp_abbreviation + i);
             i += 1;
         }
 
-        return abbrevation;
+        return abbreviation;
     }
 
     /**
@@ -156,4 +166,19 @@ public class LinkController {
             default:  return false;
         }
     }
+
+    /**
+     * returns the abbreviation if URL is already abbreviated (in the database)
+     * @param url The URL to check
+     * @return the abbreviation if the URL is already abbreviated, else null
+     */
+    private String getAbbreviationIfAbbreviated(String url) {
+        for (Link iterate_link : linkRepository.findAll()) {
+            if (url.equals(iterate_link.getUrl())) {
+                return iterate_link.getAbbreviation();
+            }
+        }
+        return null;
+    }
+
 }
